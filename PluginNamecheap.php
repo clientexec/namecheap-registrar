@@ -1,11 +1,14 @@
 <?php
 
 require_once 'modules/admin/models/RegistrarPlugin.php';
-require_once 'modules/domains/models/ICanImportDomains.php';
 
-class PluginNamecheap extends RegistrarPlugin implements ICanImportDomains
+class PluginNamecheap extends RegistrarPlugin
 {
-    public $supportsNamesuggest = false;
+    public $features = [
+        'nameSuggest' => false,
+        'importDomains' => true,
+        'importPrices' => false,
+    ];
 
     private $sandboxUrl = 'https://api.sandbox.namecheap.com/xml.response';
     private $liveUrl = 'https://api.namecheap.com/xml.response';
@@ -36,8 +39,8 @@ class PluginNamecheap extends RegistrarPlugin implements ICanImportDomains
                                 ),
             lang('Supported Features')  => array(
                                 'type'          => 'label',
-                                'description'   => '',
-                                'value'         => '* '.lang('TLD Lookup').'<br>* '.lang('Domain Registration').' <br>* '.lang('Existing Domain Importing').' <br>* '.lang('Get / Set DNS Records').' <br>* '.lang('Get / Set Nameserver Records').' <br>* '.lang('Get / Set Contact Information').' <br>* '.lang('Get / Set Registrar Lock').' <br>* '.lang('Initiate Domain Transfer').' <br>* '.lang('Automatically Renew Domain')
+                                'description'   => '* '.lang('TLD Lookup').'<br>* '.lang('Domain Registration').' <br>* '.lang('Existing Domain Importing').' <br>* '.lang('Get / Set DNS Records').' <br>* '.lang('Get / Set Nameserver Records').' <br>* '.lang('Get / Set Contact Information').' <br>* '.lang('Get / Set Registrar Lock').' <br>* '.lang('Initiate Domain Transfer').' <br>* '.lang('Automatically Renew Domain'),
+                                'value'         => ''
                                 ),
             lang('Actions') => array (
                                 'type'          => 'hidden',
@@ -107,10 +110,10 @@ class PluginNamecheap extends RegistrarPlugin implements ICanImportDomains
         $response = $this->makeRequest('namecheap.domains.check', $params, $arguments);
         if ($response->CommandResponse->DomainCheckResult->attributes()->Available == 'false') {
             $status = 1;
-        } else if ($response->CommandResponse->DomainCheckResult->attributes()->IsPremiumName == 'true') {
+        } elseif ($response->CommandResponse->DomainCheckResult->attributes()->IsPremiumName == 'true') {
             // we do not allow premium domains right now.
             $status = 1;
-        } else if ($response->CommandResponse->DomainCheckResult->attributes()->Available == 'true') {
+        } elseif ($response->CommandResponse->DomainCheckResult->attributes()->Available == 'true') {
             $status = 0;
         }
 
@@ -447,7 +450,7 @@ class PluginNamecheap extends RegistrarPlugin implements ICanImportDomains
 
             if ($record['type'] == 'MX') {
                 $arguments['EmailType'] = 'MX';
-            } else if ($record['type'] == 'MXE') {
+            } elseif ($record['type'] == 'MXE') {
                 $arguments['EmailType'] = 'MXE';
             }
         }
