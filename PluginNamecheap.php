@@ -233,7 +233,7 @@ class PluginNamecheap extends RegistrarPlugin
         $args['ApiUser'] = $params['Username'];
         $args['Username'] = $params['Username'];
         $args['ApiKey'] = $params['API Key'];
-        $args['ClientIp'] = CE_Lib::getRemoteAddr();
+        $args['ClientIp'] = CE_Lib::getServerAddr();
         if ($args['ClientIp'] == '::1') {
             $args['ClientIp'] = '127.0.0.1';
         }
