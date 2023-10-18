@@ -7,7 +7,7 @@ class PluginNamecheap extends RegistrarPlugin
     public $features = [
         'nameSuggest' => false,
         'importDomains' => true,
-        'importPrices' => false,
+        'importPrices' => true,
     ];
 
     private $sandboxUrl = 'https://api.sandbox.namecheap.com/xml.response';
@@ -16,57 +16,120 @@ class PluginNamecheap extends RegistrarPlugin
 
     public function getVariables()
     {
-        $variables = array(
-            lang('Plugin Name') => array (
-                                'type'          =>'hidden',
-                                'description'   =>lang('How CE sees this plugin (not to be confused with the Signup Name)'),
-                                'value'         =>lang('NameCheap')
-                               ),
-            lang('Use Sandbox?') => array(
-                                'type'          =>'yesno',
-                                'description'   =>lang('Select Yes if you wish to use NameCheap\'s sandbox environment.'),
-                                'value'         =>0
-                               ),
-            lang('Username') => array(
-                                'type'          =>'text',
-                                'description'   =>lang('Enter your username for your NameCheap account.'),
-                                'value'         =>''
-                               ),
-            lang('API Key')  => array(
-                                'type'          =>'text',
-                                'description'   =>lang('Enter the API Key for your NameCheap account.'),
-                                'value'         =>'',
-                                ),
-            lang('Supported Features')  => array(
-                                'type'          => 'label',
-                                'description'   => '* '.lang('TLD Lookup').'<br>* '.lang('Domain Registration').' <br>* '.lang('Existing Domain Importing').' <br>* '.lang('Get / Set DNS Records').' <br>* '.lang('Get / Set Nameserver Records').' <br>* '.lang('Get / Set Contact Information').' <br>* '.lang('Get / Set Registrar Lock').' <br>* '.lang('Initiate Domain Transfer').' <br>* '.lang('Automatically Renew Domain'),
-                                'value'         => ''
-                                ),
-            lang('Actions') => array (
-                                'type'          => 'hidden',
-                                'description'   => lang('Current actions that are active for this plugin (when a domain isn\'t registered)'),
-                                'value'         => 'Register'
-                                ),
-            lang('Registered Actions') => array (
-                                'type'          => 'hidden',
-                                'description'   => lang('Current actions that are active for this plugin (when a domain is registered)'),
-                                'value'         => 'Renew (Renew Domain),DomainTransferWithPopup (Initiate Transfer),Cancel',
-                                ),
-            lang('Registered Actions For Customer') => array (
-                                'type'          => 'hidden',
-                                'description'   => lang('Current actions that are active for this plugin (when a domain is registered)'),
-                                'value'         => '',
-            )
-        );
+        $variables = [
+            lang('Plugin Name') => [
+                'type' => 'hidden',
+                'description' => lang('How CE sees this plugin (not to be confused with the Signup Name)'),
+                'value' => lang('NameCheap')
+            ],
+            lang('Use Sandbox?') => [
+                'type' => 'yesno',
+                'description' => lang('Select Yes if you wish to use NameCheap\'s sandbox environment.'),
+                'value' => 0
+            ],
+            lang('Username') => [
+                'type' => 'text',
+                'description' => lang('Enter your username for your NameCheap account.'),
+                'value' => ''
+            ],
+            lang('API Key')  => [
+                'type' => 'text',
+                'description' => lang('Enter the API Key for your NameCheap account.'),
+                'value' => '',
+            ],
+            lang('Supported Features') => [
+                'type' => 'label',
+                'description' => '* ' . lang('TLD Lookup') . '<br>* ' . lang('Domain Registration') . ' <br>* ' . lang('Existing Domain Importing') . ' <br>* ' . lang('Get / Set DNS Records') . ' <br>* ' . lang('Get / Set Nameserver Records') . ' <br>* ' . lang('Get / Set Contact Information') . ' <br>* ' . lang('Get / Set Registrar Lock') . ' <br>* ' . lang('Initiate Domain Transfer') . ' <br>* ' . lang('Automatically Renew Domain'),
+                'value' => ''
+            ],
+            lang('Actions') => [
+                'type' => 'hidden',
+                'description' => lang('Current actions that are active for this plugin (when a domain isn\'t registered)'),
+                'value' => 'Register'
+            ],
+            lang('Registered Actions') => [
+                'type' => 'hidden',
+                'description' => lang('Current actions that are active for this plugin (when a domain is registered)'),
+                'value' => 'Renew (Renew Domain),DomainTransferWithPopup (Initiate Transfer),Cancel',
+            ],
+            lang('Registered Actions For Customer') => [
+                'type' => 'hidden',
+                'description' => lang('Current actions that are active for this plugin (when a domain is registered)'),
+                'value' => '',
+            ]
+        ];
 
         return $variables;
+    }
+
+    public function getTLDsAndPrices($params)
+    {
+        $tlds = [];
+        $arguments = [
+            'ProductType' => 'DOMAIN',
+            'ProductCategory' => 'DOMAINS',
+            'ActionName' => 'REGISTER'
+        ];
+
+        $response = $this->makeRequest('namecheap.users.getPricing', $params, $arguments);
+        $response = $response->CommandResponse->UserGetPricingResult->ProductType->ProductCategory->Product;
+
+        foreach ($response as $r) {
+            $tld = (string)$r->attributes()->Name;
+            foreach ($r->Price as $price) {
+                if ($price->attributes()->Duration == '1' && $price->attributes()->DurationType == 'YEAR') {
+                    $tlds[$tld]['pricing']['register'] = (float)$price->attributes()->Price;
+                    continue;
+                }
+            }
+        }
+
+        $arguments = [
+            'ProductType' => 'DOMAIN',
+            'ProductCategory' => 'DOMAINS',
+            'ActionName' => 'RENEW'
+        ];
+
+        $response = $this->makeRequest('namecheap.users.getPricing', $params, $arguments);
+        $response = $response->CommandResponse->UserGetPricingResult->ProductType->ProductCategory->Product;
+
+        foreach ($response as $r) {
+            $tld = (string)$r->attributes()->Name;
+            foreach ($r->Price as $price) {
+                if ($price->attributes()->Duration == '1' && $price->attributes()->DurationType == 'YEAR') {
+                    $tlds[$tld]['pricing']['renew'] = (float)$price->attributes()->Price;
+                    continue;
+                }
+            }
+        }
+
+        $arguments = [
+            'ProductType' => 'DOMAIN',
+            'ProductCategory' => 'DOMAINS',
+            'ActionName' => 'TRANSFER'
+        ];
+
+        $response = $this->makeRequest('namecheap.users.getPricing', $params, $arguments);
+        $response = $response->CommandResponse->UserGetPricingResult->ProductType->ProductCategory->Product;
+
+        foreach ($response as $r) {
+            $tld = (string)$r->attributes()->Name;
+            foreach ($r->Price as $price) {
+                if ($price->attributes()->Duration == '1' && $price->attributes()->DurationType == 'YEAR') {
+                    $tlds[$tld]['pricing']['transfer'] = (float)$price->attributes()->Price;
+                    continue;
+                }
+            }
+        }
+
+        return $tlds;
     }
 
     public function doDomainTransferWithPopup($params)
     {
         $userPackage = new UserPackage($params['userPackageId']);
         $transferid = $this->initiateTransfer($this->buildTransferParams($userPackage, $params));
-        $userPackage->setCustomField("Registrar Order Id", $userPackage->getCustomField("Registrar").'-'.$transferid);
+        $userPackage->setCustomField("Registrar Order Id", $userPackage->getCustomField("Registrar") . '-' . $transferid);
         $userPackage->setCustomField('Transfer Status', $transferid);
         return "Transfer of has been initiated.";
     }
@@ -75,7 +138,7 @@ class PluginNamecheap extends RegistrarPlugin
     {
         $userPackage = new UserPackage($params['userPackageId']);
         $orderid = $this->registerDomain($this->buildRegisterParams($userPackage, $params));
-        $userPackage->setCustomField("Registrar Order Id", $userPackage->getCustomField("Registrar").'-'.$orderid);
+        $userPackage->setCustomField("Registrar Order Id", $userPackage->getCustomField("Registrar") . '-' . $orderid);
         return $userPackage->getCustomField('Domain Name') . ' has been registered.';
     }
 
@@ -83,7 +146,7 @@ class PluginNamecheap extends RegistrarPlugin
     {
         $userPackage = new UserPackage($params['userPackageId']);
         $orderid = $this->renewDomain($this->buildRenewParams($userPackage, $params));
-        $userPackage->setCustomField("Registrar Order Id", $userPackage->getCustomField("Registrar").'-'.$orderid);
+        $userPackage->setCustomField("Registrar Order Id", $userPackage->getCustomField("Registrar") . '-' . $orderid);
         return $userPackage->getCustomField('Domain Name') . ' has been renewed.';
     }
 
@@ -119,7 +182,7 @@ class PluginNamecheap extends RegistrarPlugin
 
         $domains[] = array('tld' => $params['tld'], 'domain' => $params['sld'], 'status' => $status);
 
-        return array("result"=>$domains);
+        return array("result" => $domains);
     }
 
     public function getTransferStatus($params)
@@ -140,9 +203,9 @@ class PluginNamecheap extends RegistrarPlugin
     {
         $domain = $params['sld'] . '.' . $params['tld'];
         $arguments = [
-            'DomainName'    => $domain,
-            'Years'         => 1,
-            'EPPCode'       => $params['eppCode']
+            'DomainName'  => $domain,
+            'Years'       => 1,
+            'EPPCode'     => $params['eppCode']
         ];
         $response = $this->makeRequest('namecheap.domains.transfer.create', $params, $arguments);
         $transferId = (int)$response->CommandResponse->DomainTransferCreateResult->attributes()->TransferID;
@@ -152,8 +215,8 @@ class PluginNamecheap extends RegistrarPlugin
     public function renewDomain($params)
     {
         $arguments = [
-            'DomainName'    => $params['sld'] . '.' . $params['tld'],
-            'Years'         => $params['NumYears']
+            'DomainName'  => $params['sld'] . '.' . $params['tld'],
+            'Years'       => $params['NumYears']
         ];
         $response = $this->makeRequest('namecheap.domains.renew', $params, $arguments);
         $domainId = (int)$response->CommandResponse->DomainRenewResult->attributes()->OrderID;
@@ -163,15 +226,15 @@ class PluginNamecheap extends RegistrarPlugin
     public function registerDomain($params)
     {
         $arguments = [
-            'DomainName'    => $params['sld'] . '.' . $params['tld'],
-            'Years'         => $params['NumYears']
+            'DomainName'  => $params['sld'] . '.' . $params['tld'],
+            'Years'       => $params['NumYears']
         ];
 
         $nameservers = [];
         if (isset($params['NS1'])) {
             for ($i = 1; $i <= 12; $i++) {
                 if (isset($params["NS$i"])) {
-                    $nameservers[] =$params["NS$i"]['hostname'];
+                    $nameservers[] = $params["NS$i"]['hostname'];
                 } else {
                     break;
                 }
@@ -180,16 +243,16 @@ class PluginNamecheap extends RegistrarPlugin
         $arguments['Nameservers'] = implode(',', $nameservers);
 
         $contactDetails = [
-            'FirstName'        => $params['RegistrantFirstName'],
-            'LastName'         => $params['RegistrantLastName'],
+            'FirstName'      => $params['RegistrantFirstName'],
+            'LastName'       => $params['RegistrantLastName'],
             'OrganizationName' => $params['RegistrantOrganizationName'],
-            'Address1'         => $params['RegistrantAddress1'],
-            'City'             => $params['RegistrantCity'],
-            'StateProvince'    => $params['RegistrantStateProvince'],
-            'PostalCode'       => $params['RegistrantPostalCode'],
-            'Country'          => $params['RegistrantCountry'],
-            'Phone'            => $this->validatePhone($params['RegistrantPhone'], $params['RegistrantCountry']),
-            'EmailAddress'     => $params['RegistrantEmailAddress'],
+            'Address1'       => $params['RegistrantAddress1'],
+            'City'           => $params['RegistrantCity'],
+            'StateProvince'  => $params['RegistrantStateProvince'],
+            'PostalCode'     => $params['RegistrantPostalCode'],
+            'Country'        => $params['RegistrantCountry'],
+            'Phone'          => $this->validatePhone($params['RegistrantPhone'], $params['RegistrantCountry']),
+            'EmailAddress'   => $params['RegistrantEmailAddress'],
         ];
         foreach ($contactDetails as $key => $value) {
                 $arguments['Registrant' . $key] = $value;
@@ -278,9 +341,9 @@ class PluginNamecheap extends RegistrarPlugin
                 $info[$type]['OrganizationName']  = array($this->user->lang('Organization'), (string)$contact->OrganizationName);
                 $info[$type]['FirstName'] = array($this->user->lang('First Name'), (string)$contact->FirstName);
                 $info[$type]['LastName']  = array($this->user->lang('Last Name'), (string)$contact->LastName);
-                $info[$type]['Address1']  = array($this->user->lang('Address').' 1', (string)$contact->Address1);
+                $info[$type]['Address1']  = array($this->user->lang('Address') . ' 1', (string)$contact->Address1);
                 $info[$type]['City']      = array($this->user->lang('City'), (string)$contact->City);
-                $info[$type]['StateProvince']  = array($this->user->lang('Province').'/'.$this->user->lang('State'), (string)$contact->StateProvince);
+                $info[$type]['StateProvince']  = array($this->user->lang('Province') . '/' . $this->user->lang('State'), (string)$contact->StateProvince);
                 $info[$type]['Country']   = array($this->user->lang('Country'), (string)$contact->Country);
                 $info[$type]['PostalCode']  = array($this->user->lang('Postal Code'), (string)$contact->PostalCode);
                 $info[$type]['EmailAddress']     = array($this->user->lang('Email'), (string)$contact->EmailAddress);
@@ -395,7 +458,7 @@ class PluginNamecheap extends RegistrarPlugin
         $domain = $params['sld'] . '.' . $params['tld'];
         $arguments = ['DomainName' => $domain];
         $response = $this->makeRequest('namecheap.domains.getRegistrarLock', $params, $arguments);
-        return ( $response->CommandResponse->DomainGetRegistrarLockResult->attributes()->RegistrarLockStatus == 'true' ? true: false );
+        return ( $response->CommandResponse->DomainGetRegistrarLockResult->attributes()->RegistrarLockStatus == 'true' ? true : false );
     }
 
     public function setRegistrarLock($params)
@@ -424,10 +487,10 @@ class PluginNamecheap extends RegistrarPlugin
         $response = $this->makeRequest('namecheap.domains.dns.getHosts', $params, $arguments);
         foreach ($response->CommandResponse->DomainDNSGetHostsResult->host as $host) {
             $record = [
-                'id'            =>  (int)$host->attributes()->HostId,
-                'hostname'      =>  (string)$host->attributes()->Name,
-                'address'       =>  (string)$host->attributes()->Address,
-                'type'          =>  (string)$host->attributes()->Type
+                'id'          =>  (int)$host->attributes()->HostId,
+                'hostname'    =>  (string)$host->attributes()->Name,
+                'address'     =>  (string)$host->attributes()->Address,
+                'type' =>  (string)$host->attributes()->Type
             ];
             $records[] = $record;
         }
